@@ -725,6 +725,7 @@ func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	// TODO(ppanyukov): remove instrumentation
 	defer func() {
 		buf := &bytes.Buffer{}
+		_, _ = fmt.Fprintf(buf, "expr               : %s\n", expr.String())
 		_, _ = fmt.Fprintf(buf, "poolGetCount       : %d\n", atomic.LoadInt64(&poolGetCount))
 		_, _ = fmt.Fprintf(buf, "poolGetSuccessCount: %d\n", atomic.LoadInt64(&poolGetSuccessCount))
 		_, _ = fmt.Fprintf(buf, "poolPutCount       : %d\n", atomic.LoadInt64(&poolPutCount))
