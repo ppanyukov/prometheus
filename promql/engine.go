@@ -14,6 +14,7 @@
 package promql
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"fmt"
@@ -745,6 +746,16 @@ func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 		defer dump.WriteHeapDump("eval-end-patch")
 	}
 
+	// TODO(ppanyukov): remove instrumentation
+	defer func() {
+		buf := &bytes.Buffer{}
+		_, _ = fmt.Fprintf(buf, "expr               : %s\n", expr.String())
+		_, _ = fmt.Fprintf(buf, "poolGetCount       : %d\n", atomic.LoadInt64(&poolGetCount))
+		_, _ = fmt.Fprintf(buf, "poolGetSuccessCount: %d\n", atomic.LoadInt64(&poolGetSuccessCount))
+		_, _ = fmt.Fprintf(buf, "poolPutCount       : %d\n", atomic.LoadInt64(&poolPutCount))
+		fmt.Printf("%s\n", buf.String())
+	}()
+
 	return ev.eval(expr), nil
 }
 
@@ -1348,15 +1359,22 @@ func (ev *evaluator) vectorSelectorSingle(it *storage.BufferedSeriesIterator, no
 
 var pointPool = sync.Pool{}
 
+var poolGetCount = int64(0)
+var poolGetSuccessCount = int64(0)
+var poolPutCount = int64(0)
+
 func getPointSlice(sz int) []Point {
+	atomic.AddInt64(&poolGetCount, 1)
 	p := pointPool.Get()
 	if p != nil {
+		atomic.AddInt64(&poolGetSuccessCount, 1)
 		return p.([]Point)
 	}
 	return make([]Point, 0, sz)
 }
 
 func putPointSlice(p []Point) {
+	atomic.AddInt64(&poolPutCount, 1)
 	//lint:ignore SA6002 relax staticcheck verification.
 	pointPool.Put(p[:0])
 }
