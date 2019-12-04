@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -725,9 +726,10 @@ func (ev *evaluator) recover(errp *error) {
 }
 
 // TODO(ppanyukov): remove instrumentation
-// For easy switch on/off without rebuild. Default is "on".
-var isAllocPatchOff = func() bool {
-	return os.Getenv("PROMQL_ALLOC_PATCH_OFF") == "yes"
+// For easy switch on/off without rebuild. Default is "off".
+var isAllocPatchOn = func() bool {
+	val := strings.ToUpper(os.Getenv("PROMQL_ALLOC_PATCH_ON"))
+	return val == "YES" || val == "ON" || val == "TRUE"
 }()
 
 func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
@@ -738,12 +740,12 @@ func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	defer memstats.PrintDiff()
 
 	//// TODO(ppanyukov): remove instrumentation
-	//if isAllocPatchOff {
-	//	dump.WriteHeapDump("eval-start-orig")
-	//	defer dump.WriteHeapDump("eval-end-orig")
-	//} else {
+	//if isAllocPatchOn {
 	//	dump.WriteHeapDump("eval-start-patch")
 	//	defer dump.WriteHeapDump("eval-end-patch")
+	//} else {
+	//	dump.WriteHeapDump("eval-start-orig")
+	//	defer dump.WriteHeapDump("eval-end-orig")
 	//}
 
 	// TODO(ppanyukov): remove instrumentation
@@ -1214,7 +1216,7 @@ func (ev *evaluator) eval(expr Expr) Value {
 			//		PromQL: VectorSelector: pointsAllocSize: 4241900; Size: 67.87M
 			//		PromQL: VectorSelector: pointsNeededSize: 13700; Size: 0.22M
 			//		PromQL: VectorSelector: pointsOverAllocRatio: 309x
-			if !isAllocPatchOff {
+			if isAllocPatchOn {
 				if len(ss.Points) == 0 {
 					// If we don't have any points, simply kill it, but may be unnecessary.
 					ss.Points = make([]Point, 0)
@@ -1245,7 +1247,7 @@ func (ev *evaluator) eval(expr Expr) Value {
 			pointsOverAllocRatioInitial := float64(pointsAllocInitial) / float64(pointsAllocNeeded)
 			pointsOverAllocRatioFinal := float64(pointsAllocFinal) / float64(pointsAllocNeeded)
 
-			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_OFF: %t\n", isAllocPatchOff)
+			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON: %t\n", isAllocPatchOn)
 			fmt.Printf("PromQL: Expression: %s\n", e.String())
 			fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
 			fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
