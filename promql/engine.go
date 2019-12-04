@@ -1170,6 +1170,8 @@ func (ev *evaluator) eval(expr Expr) Value {
 		pointsCapFinal := int64(0)
 		pointsLen := int64(0)
 
+		const pointsOverallocLimit = float64(2.0)
+
 		for i, s := range e.series {
 			it.Reset(s.Iterator())
 			ss := Series{
@@ -1219,7 +1221,6 @@ func (ev *evaluator) eval(expr Expr) Value {
 				} else {
 					// Don't bother with shrinking/realloc if we are less than 20% overallocated.
 					// It's an arbitrary number at this point.
-					pointsOverallocLimit := 1.2
 					pointsOverallocRatio := float64(cap(ss.Points)) / float64(len(ss.Points))
 					if pointsOverallocRatio > pointsOverallocLimit {
 						pointsCopy := make([]Point, len(ss.Points))
@@ -1248,12 +1249,13 @@ func (ev *evaluator) eval(expr Expr) Value {
 			fmt.Printf("PromQL: Expression: %s\n", e.String())
 			fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
 			fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocInitial: %d; Size: %.2fM\n", pointsCapInitial, float64(pointsAllocInitial)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocNeeded:  %d; Size: %.2fM\n", pointsLen, float64(pointsAllocNeeded)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocFinal:   %d; Size: %.2fM\n", pointsCapFinal, float64(pointsAllocFinal)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioInitial:  %.2fx\n", pointsOverAllocRatioInitial)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioFinal:    %.2fx\n", pointsOverAllocRatioFinal)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocDelta:         %.2fx\n", pointsOverAllocRatioFinal-pointsOverAllocRatioInitial)
+			fmt.Printf("PromQL: VectorSelector: pointsAllocInitial:   %d; Size: %.2fM\n", pointsCapInitial, float64(pointsAllocInitial)/1000000)
+			fmt.Printf("PromQL: VectorSelector: pointsAllocNeeded:    %d; Size: %.2fM\n", pointsLen, float64(pointsAllocNeeded)/1000000)
+			fmt.Printf("PromQL: VectorSelector: pointsAllocFinal:     %d; Size: %.2fM\n", pointsCapFinal, float64(pointsAllocFinal)/1000000)
+			fmt.Printf("PromQL: VectorSelector: pointsOverallocLimit:        %.2f\n", pointsOverallocLimit)
+			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioInitial: %.2fx\n", pointsOverAllocRatioInitial)
+			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioFinal:   %.2fx\n", pointsOverAllocRatioFinal)
+			fmt.Printf("PromQL: VectorSelector: pointsOverAllocDelta:        %.2fx\n", pointsOverAllocRatioFinal-pointsOverAllocRatioInitial)
 		}
 
 		return mat
