@@ -737,14 +737,14 @@ func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	memstats := dump.NewMemStats("promql-eval")
 	defer memstats.PrintDiff()
 
-	// TODO(ppanyukov): remove instrumentation
-	if isAllocPatchOff {
-		dump.WriteHeapDump("eval-start-orig")
-		defer dump.WriteHeapDump("eval-end-orig")
-	} else {
-		dump.WriteHeapDump("eval-start-patch")
-		defer dump.WriteHeapDump("eval-end-patch")
-	}
+	//// TODO(ppanyukov): remove instrumentation
+	//if isAllocPatchOff {
+	//	dump.WriteHeapDump("eval-start-orig")
+	//	defer dump.WriteHeapDump("eval-end-orig")
+	//} else {
+	//	dump.WriteHeapDump("eval-start-patch")
+	//	defer dump.WriteHeapDump("eval-end-patch")
+	//}
 
 	// TODO(ppanyukov): remove instrumentation
 	defer func() {
