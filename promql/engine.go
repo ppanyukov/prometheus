@@ -1237,7 +1237,7 @@ func (ev *evaluator) eval(expr Expr) Value {
 
 			if len(ss.Points) > 0 {
 				mat = append(mat, ss)
-			} else {
+			} else if cap(ss.Points) > 0 {
 				putPointSlice(ss.Points)
 			}
 		}
