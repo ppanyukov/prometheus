@@ -1231,7 +1231,11 @@ func (ev *evaluator) eval(expr Expr) Value {
 				if pointsOverallocRatio > pointsOverallocLimit {
 					pointsCopy := make([]Point, len(ss.Points))
 					copy(pointsCopy, ss.Points)
+					reuse = ss.Points
 					ss.Points = pointsCopy
+					reuse = reuse[:0]
+				} else {
+					reuse = nil
 				}
 			} else {
 				reuse = nil
