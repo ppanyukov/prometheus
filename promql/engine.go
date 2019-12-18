@@ -732,15 +732,6 @@ var isAllocPatchOn = func() bool {
 	return val == "YES" || val == "ON" || val == "TRUE"
 }()
 
-
-// TODO(ppanyukov): remove instrumentation
-// For easy switch on/off without rebuild. Default is "off".
-var isAllocPatch2On = func() bool {
-	val := strings.ToUpper(os.Getenv("PROMQL_ALLOC_PATCH2_ON"))
-	return val == "YES" || val == "ON" || val == "TRUE"
-}()
-
-
 func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	defer ev.recover(&err)
 
@@ -1185,12 +1176,18 @@ func (ev *evaluator) eval(expr Expr) Value {
 
 		const pointsOverallocLimit = float64(2.0)
 
+		var reuse []Point
 		for i, s := range e.series {
 			it.Reset(s.Iterator())
 			ss := Series{
 				Metric: e.series[i].Labels(),
 				// TODO(ppanyukov): this overallocates and keeps 200x-300x than required
-				Points: getPointSlice(numSteps),
+				Points: func() []Point {
+					if cap(reuse) == 0 {
+						reuse = make([]Point, 0, numSteps)
+					}
+					return reuse
+				}(),
 			}
 
 			for ts := ev.startTimestamp; ts <= ev.endTimestamp; ts += ev.interval {
@@ -1234,16 +1231,12 @@ func (ev *evaluator) eval(expr Expr) Value {
 				if pointsOverallocRatio > pointsOverallocLimit {
 					pointsCopy := make([]Point, len(ss.Points))
 					copy(pointsCopy, ss.Points)
-					// Put the previously over-allocated slice into the pool
-					// for reuse in the next loop iteration rather than dropping
-					// it on the floor and making it garbage and making runtime
-					// ask for more and mor of sys heap.
-					if isAllocPatch2On {
-						putPointSlice(ss.Points)
-					}
 					ss.Points = pointsCopy
 				}
+			} else {
+				reuse = nil
 			}
+
 			pointsCapFinal += int64(cap(ss.Points))
 
 			if len(ss.Points) > 0 {
@@ -1262,8 +1255,8 @@ func (ev *evaluator) eval(expr Expr) Value {
 			pointsOverAllocRatioInitial := float64(pointsAllocInitial) / float64(pointsAllocNeeded)
 			pointsOverAllocRatioFinal := float64(pointsAllocFinal) / float64(pointsAllocNeeded)
 
-			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON : %t\n", isAllocPatchOn)
-			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH2_ON: %t\n", isAllocPatch2On)
+			fmt.Printf("PromQL: SYNC_POOL_IS_OFF: %t\n", true)
+			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON (sync.Pool) : %t\n", isAllocPatchOn)
 			fmt.Printf("PromQL: Expression: %s\n", e.String())
 			fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
 			fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
@@ -1384,19 +1377,20 @@ var poolGetSuccessCount = int64(0)
 var poolPutCount = int64(0)
 
 func getPointSlice(sz int) []Point {
-	atomic.AddInt64(&poolGetCount, 1)
-	p := pointPool.Get()
-	if p != nil {
-		atomic.AddInt64(&poolGetSuccessCount, 1)
-		return p.([]Point)
-	}
+	//atomic.AddInt64(&poolGetCount, 1)
+	//p := pointPool.Get()
+	//if p != nil {
+	//	atomic.AddInt64(&poolGetSuccessCount, 1)
+	//	return p.([]Point)
+	//}
 	return make([]Point, 0, sz)
 }
 
 func putPointSlice(p []Point) {
-	atomic.AddInt64(&poolPutCount, 1)
+	//atomic.AddInt64(&poolPutCount, 1)
 	//lint:ignore SA6002 relax staticcheck verification.
-	pointPool.Put(p[:0])
+	// TODO(ppanyukov): do not use pool at all
+	//pointPool.Put(p[:0])
 }
 
 // matrixSelector evaluates a *MatrixSelector expression.
