@@ -732,6 +732,15 @@ var isAllocPatchOn = func() bool {
 	return val == "YES" || val == "ON" || val == "TRUE"
 }()
 
+
+// TODO(ppanyukov): remove instrumentation
+// For easy switch on/off without rebuild. Default is "off".
+var isAllocPatch2On = func() bool {
+	val := strings.ToUpper(os.Getenv("PROMQL_ALLOC_PATCH2_ON"))
+	return val == "YES" || val == "ON" || val == "TRUE"
+}()
+
+
 func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	defer ev.recover(&err)
 
@@ -1219,18 +1228,20 @@ func (ev *evaluator) eval(expr Expr) Value {
 			//		PromQL: VectorSelector: pointsNeededSize: 13700; Size: 0.22M
 			//		PromQL: VectorSelector: pointsOverAllocRatio: 309x
 			if isAllocPatchOn {
-				if len(ss.Points) == 0 {
-					// If we don't have any points, simply kill it, but may be unnecessary.
-					ss.Points = make([]Point, 0)
-				} else {
-					// Don't bother with shrinking/realloc if we are less than 20% overallocated.
-					// It's an arbitrary number at this point.
-					pointsOverallocRatio := float64(cap(ss.Points)) / float64(len(ss.Points))
-					if pointsOverallocRatio > pointsOverallocLimit {
-						pointsCopy := make([]Point, len(ss.Points))
-						copy(pointsCopy, ss.Points)
-						ss.Points = pointsCopy
+				// Don't bother with shrinking/realloc if we are less than 20% overallocated.
+				// It's an arbitrary number at this point.
+				pointsOverallocRatio := float64(cap(ss.Points)) / float64(len(ss.Points))
+				if pointsOverallocRatio > pointsOverallocLimit {
+					pointsCopy := make([]Point, len(ss.Points))
+					copy(pointsCopy, ss.Points)
+					// Put the previously over-allocated slice into the pool
+					// for reuse in the next loop iteration rather than dropping
+					// it on the floor and making it garbage and making runtime
+					// ask for more and mor of sys heap.
+					if isAllocPatch2On {
+						putPointSlice(ss.Points)
 					}
+					ss.Points = pointsCopy
 				}
 			}
 			pointsCapFinal += int64(cap(ss.Points))
@@ -1251,7 +1262,8 @@ func (ev *evaluator) eval(expr Expr) Value {
 			pointsOverAllocRatioInitial := float64(pointsAllocInitial) / float64(pointsAllocNeeded)
 			pointsOverAllocRatioFinal := float64(pointsAllocFinal) / float64(pointsAllocNeeded)
 
-			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON: %t\n", isAllocPatchOn)
+			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON : %t\n", isAllocPatchOn)
+			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH2_ON: %t\n", isAllocPatch2On)
 			fmt.Printf("PromQL: Expression: %s\n", e.String())
 			fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
 			fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
