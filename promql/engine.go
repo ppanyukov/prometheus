@@ -14,7 +14,6 @@
 package promql
 
 import (
-	"bytes"
 	"container/heap"
 	"context"
 	"fmt"
@@ -28,13 +27,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
@@ -735,9 +732,9 @@ var isAllocPatchOn = func() bool {
 func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	defer ev.recover(&err)
 
-	// TODO(ppanyukov): remove instrumentation
-	memstats := dump.NewMemStats("promql-eval")
-	defer memstats.PrintDiff()
+	//// TODO(ppanyukov): remove instrumentation
+	//memstats := dump.NewMemStats("promql-eval")
+	//defer memstats.PrintDiff()
 
 	//// TODO(ppanyukov): remove instrumentation
 	//if isAllocPatchOn {
@@ -748,15 +745,15 @@ func (ev *evaluator) Eval(expr Expr) (v Value, err error) {
 	//	defer dump.WriteHeapDump("eval-end-orig")
 	//}
 
-	// TODO(ppanyukov): remove instrumentation
-	defer func() {
-		buf := &bytes.Buffer{}
-		_, _ = fmt.Fprintf(buf, "expr               : %s\n", expr.String())
-		_, _ = fmt.Fprintf(buf, "poolGetCount       : %d\n", atomic.LoadInt64(&poolGetCount))
-		_, _ = fmt.Fprintf(buf, "poolGetSuccessCount: %d\n", atomic.LoadInt64(&poolGetSuccessCount))
-		_, _ = fmt.Fprintf(buf, "poolPutCount       : %d\n", atomic.LoadInt64(&poolPutCount))
-		fmt.Printf("%s\n", buf.String())
-	}()
+	//// TODO(ppanyukov): remove instrumentation
+	//defer func() {
+	//	buf := &bytes.Buffer{}
+	//	_, _ = fmt.Fprintf(buf, "expr               : %s\n", expr.String())
+	//	_, _ = fmt.Fprintf(buf, "poolGetCount       : %d\n", atomic.LoadInt64(&poolGetCount))
+	//	_, _ = fmt.Fprintf(buf, "poolGetSuccessCount: %d\n", atomic.LoadInt64(&poolGetSuccessCount))
+	//	_, _ = fmt.Fprintf(buf, "poolPutCount       : %d\n", atomic.LoadInt64(&poolPutCount))
+	//	fmt.Printf("%s\n", buf.String())
+	//}()
 
 	return ev.eval(expr), nil
 }
@@ -1169,10 +1166,10 @@ func (ev *evaluator) eval(expr Expr) Value {
 		mat := make(Matrix, 0, len(e.series))
 		it := storage.NewBuffer(durationMilliseconds(LookbackDelta))
 
-		// TODO(ppanyukov): remove instrumentation
-		pointsCapInitial := int64(0)
-		pointsCapFinal := int64(0)
-		pointsLen := int64(0)
+		//// TODO(ppanyukov): remove instrumentation
+		//pointsCapInitial := int64(0)
+		//pointsCapFinal := int64(0)
+		//pointsLen := int64(0)
 
 		const pointsOverallocLimit = float64(2.0)
 
@@ -1202,9 +1199,9 @@ func (ev *evaluator) eval(expr Expr) Value {
 				}
 			}
 
-			// TODO(ppanyukov): remove instrumentation
-			pointsCapInitial += int64(cap(ss.Points))
-			pointsLen += int64(len(ss.Points))
+			//// TODO(ppanyukov): remove instrumentation
+			//pointsCapInitial += int64(cap(ss.Points))
+			//pointsLen += int64(len(ss.Points))
 
 			// TODO(ppanyukov): this is overallocation patch to shrink ss.Points.
 			// 	The overallocation seems to be a function of:
@@ -1241,7 +1238,7 @@ func (ev *evaluator) eval(expr Expr) Value {
 				reuse = nil
 			}
 
-			pointsCapFinal += int64(cap(ss.Points))
+			//pointsCapFinal += int64(cap(ss.Points))
 
 			if len(ss.Points) > 0 {
 				mat = append(mat, ss)
@@ -1250,28 +1247,28 @@ func (ev *evaluator) eval(expr Expr) Value {
 			}
 		}
 
-		// TODO: remove this once we don't need it.
-		{
-			pointsAllocInitial := pointsCapInitial * int64(unsafe.Sizeof(Point{}))
-			pointsAllocNeeded := pointsLen * int64(unsafe.Sizeof(Point{}))
-			pointsAllocFinal := pointsCapFinal * int64(unsafe.Sizeof(Point{}))
-
-			pointsOverAllocRatioInitial := float64(pointsAllocInitial) / float64(pointsAllocNeeded)
-			pointsOverAllocRatioFinal := float64(pointsAllocFinal) / float64(pointsAllocNeeded)
-
-			fmt.Printf("PromQL: SYNC_POOL_IS_OFF: %t\n", true)
-			fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON (sync.Pool) : %t\n", isAllocPatchOn)
-			fmt.Printf("PromQL: Expression: %s\n", e.String())
-			fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
-			fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocInitial:   %d; Size: %.2fM\n", pointsCapInitial, float64(pointsAllocInitial)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocNeeded:    %d; Size: %.2fM\n", pointsLen, float64(pointsAllocNeeded)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsAllocFinal:     %d; Size: %.2fM\n", pointsCapFinal, float64(pointsAllocFinal)/1000000)
-			fmt.Printf("PromQL: VectorSelector: pointsOverallocLimit:        %.2f\n", pointsOverallocLimit)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioInitial: %.2fx\n", pointsOverAllocRatioInitial)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioFinal:   %.2fx\n", pointsOverAllocRatioFinal)
-			fmt.Printf("PromQL: VectorSelector: pointsOverAllocDelta:        %.2fx\n", pointsOverAllocRatioFinal-pointsOverAllocRatioInitial)
-		}
+		//// TODO: remove this once we don't need it.
+		//{
+		//	pointsAllocInitial := pointsCapInitial * int64(unsafe.Sizeof(Point{}))
+		//	pointsAllocNeeded := pointsLen * int64(unsafe.Sizeof(Point{}))
+		//	pointsAllocFinal := pointsCapFinal * int64(unsafe.Sizeof(Point{}))
+		//
+		//	pointsOverAllocRatioInitial := float64(pointsAllocInitial) / float64(pointsAllocNeeded)
+		//	pointsOverAllocRatioFinal := float64(pointsAllocFinal) / float64(pointsAllocNeeded)
+		//
+		//	fmt.Printf("PromQL: SYNC_POOL_IS_OFF: %t\n", true)
+		//	fmt.Printf("PromQL: PROMQL_ALLOC_PATCH_ON (sync.Pool) : %t\n", isAllocPatchOn)
+		//	fmt.Printf("PromQL: Expression: %s\n", e.String())
+		//	fmt.Printf("PromQL: VectorSelector: Series Count:    %d\n", len(e.series))
+		//	fmt.Printf("PromQL: VectorSelector: Current Samples: %d\n", ev.currentSamples)
+		//	fmt.Printf("PromQL: VectorSelector: pointsAllocInitial:   %d; Size: %.2fM\n", pointsCapInitial, float64(pointsAllocInitial)/1000000)
+		//	fmt.Printf("PromQL: VectorSelector: pointsAllocNeeded:    %d; Size: %.2fM\n", pointsLen, float64(pointsAllocNeeded)/1000000)
+		//	fmt.Printf("PromQL: VectorSelector: pointsAllocFinal:     %d; Size: %.2fM\n", pointsCapFinal, float64(pointsAllocFinal)/1000000)
+		//	fmt.Printf("PromQL: VectorSelector: pointsOverallocLimit:        %.2f\n", pointsOverallocLimit)
+		//	fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioInitial: %.2fx\n", pointsOverAllocRatioInitial)
+		//	fmt.Printf("PromQL: VectorSelector: pointsOverAllocRatioFinal:   %.2fx\n", pointsOverAllocRatioFinal)
+		//	fmt.Printf("PromQL: VectorSelector: pointsOverAllocDelta:        %.2fx\n", pointsOverAllocRatioFinal-pointsOverAllocRatioInitial)
+		//}
 
 		return mat
 
